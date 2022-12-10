@@ -23,11 +23,11 @@ void linear_backprop_cpu(float *errors, float *out_errors, float *weights, int n
     // Error at prev layer = matmul of weights with error at curr layer
     // errors = (n_out * batch_size), out_errors = (n_in * batch_size), weights = (n_in * n_out)
     for (int sample = 0; sample < batch_size; sample++) {
-        for (int j = 0; j < n_in; j++) {
-            out_errors_index = sample * n_in + j;
-            for (int k = 0; k < n_out; k++) {
-                errors_index = sample * n_out + k;
-                weights_index = j * n_out + k;
+        for (int i = 0; i < n_in; i++) {
+            out_errors_index = sample * n_in + i;
+            for (int j = 0; j < n_out; j++) {
+                errors_index = sample * n_out + j;
+                weights_index = i * n_out + j;
                 out_errors[out_errors_index] += weights[weights_index] * errors[errors_index];
             }
         }
