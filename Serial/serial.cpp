@@ -6,7 +6,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 64
+#define BATCH_SIZE 32
 
 float max(float t1, float t2) {
     return t1 < t2 ? t2 : t1;
@@ -39,9 +39,6 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
         }
         for (int j = 0; j < n_out; j++) {
             out[sample * n_out + j] /= sum_exp;
-            if (isnan(out[sample * n_out + j])) {
-                std::cout << sum_exp << "," << max_ << "\n";
-            }
         }
     }
 }
@@ -158,8 +155,8 @@ float accuracy(float *output, float *target, int n_out) {
 }
 
 int main() {
-    int n_in = 784, n_hidden = 128, n_out = 10, n_epochs = 2;
-    float lr = 0.005;
+    int n_in = 784, n_hidden = 256, n_out = 10, n_epochs = 5;
+    float lr = (128.0/n_hidden)*0.001;
     int data_size;
 
     vector<float> x_train;
@@ -169,7 +166,6 @@ int main() {
     std::cout << "Training data size: " << data_size << std::endl;
 
     int train_test_split = (int)(0.9 * data_size);
-    // std::cout << train_test_split << std::endl;
 
     float *l1_weights = new float[n_in * n_hidden];
     float *l1_bias = new float[n_hidden];
@@ -198,6 +194,7 @@ int main() {
             input = &x_train[batch * BATCH_SIZE * n_in];
             target = &y_train[batch * BATCH_SIZE * n_out];
 
+            // FORWARD PROPAGATION STEP
             l1_out = new float[n_hidden * BATCH_SIZE];
             linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
 
@@ -212,8 +209,8 @@ int main() {
 
             error = 0;
             CE_forward_cpu(target, output, &error, n_out);
-            std::cout << "error: " << error << std::endl;
-
+            
+            // BACK PROPAGATION STEP
             l2_error = new float[BATCH_SIZE * n_out];
             softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
@@ -225,6 +222,9 @@ int main() {
 
             linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
             linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
+
+            std::cout << "error: " << error << std::endl;
+
         }
     }
 

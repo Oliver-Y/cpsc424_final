@@ -42,8 +42,6 @@ void load_mnist(vector<float> &x_train, vector<float> &y_train, int *data_size) 
     vector<string> line_v;
 
     cout << "Loading data ...\n";
-    // vector<float> x_train;
-    // vector<float> y_train;
 
     ifstream myfile("train.txt");
     if (myfile.is_open()) {
