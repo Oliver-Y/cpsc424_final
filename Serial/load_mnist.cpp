@@ -1,8 +1,5 @@
-#include <chrono>
-#include <cmath>
 #include <fstream>
 #include <iostream>
-#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -20,13 +17,6 @@ vector<string> split(const string &s, char delim) {
 }
 
 vector<float> operator-(const vector<float> &m1, const float m2) {
-    /*  Returns the difference between two vectors.
-     Inputs:
-     m1: vector
-     m2: vector
-     Output: vector, m1 - m2, difference between two vectors m1 and m2.
-     */
-
     const unsigned long VECTOR_SIZE = m1.size();
     vector<float> difference(VECTOR_SIZE);
 
@@ -38,25 +28,16 @@ vector<float> operator-(const vector<float> &m1, const float m2) {
 }
 
 vector<float> operator/(const vector<float> &m2, const float m1) {
-    /*  Returns the product of a float and a vectors (elementwise multiplication).
-     Inputs:
-     m1: float
-     m2: vector
-     Output: vector, m1 * m2, product of two vectors m1 and m2
-     */
-
     const unsigned long VECTOR_SIZE = m2.size();
     vector<float> product(VECTOR_SIZE);
 
     for (unsigned i = 0; i != VECTOR_SIZE; ++i) {
         product[i] = m2[i] / m1;
     };
-
     return product;
 }
 
-
-void load_mnist(vector<float>& x_train, vector<float>& y_train, int *data_size){
+void load_mnist(vector<float> &x_train, vector<float> &y_train, int *data_size) {
     string line;
     vector<string> line_v;
 
@@ -86,5 +67,5 @@ void load_mnist(vector<float>& x_train, vector<float>& y_train, int *data_size){
         x_train = x_train / 0.3081;
         myfile.close();
     }
-    *data_size = y_train.size()/10;
+    *data_size = y_train.size() / 10;
 }

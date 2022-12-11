@@ -1,13 +1,9 @@
 #include <chrono>
 #include <cmath>
-#include <fstream>
-#include <iostream>
 #include <random>
-#include <sstream>
-#include <string>
-#include <vector>
 
-#include "mnist.h"
+#include "load_mnist.h"
+
 using namespace std;
 
 #define BATCH_SIZE 64
@@ -162,10 +158,8 @@ float accuracy(float *output, float *target, int n_out) {
 }
 
 int main() {
-    int n_in = 784, n_epochs = 1;
+    int n_in = 784, n_hidden = 128, n_out = 10, n_epochs = 2;
     float lr = 0.005;
-    int n_hidden = 128;
-    int n_out = 10;
     int data_size;
 
     vector<float> x_train;
@@ -176,8 +170,6 @@ int main() {
 
     int train_test_split = (int)(0.9 * data_size);
     // std::cout << train_test_split << std::endl;
-
-    float *input, *target, *output;
 
     float *l1_weights = new float[n_in * n_hidden];
     float *l1_bias = new float[n_hidden];
@@ -192,9 +184,12 @@ int main() {
     init_zero(l2_bias, n_out);
 
     float error;
+    float *input, *target, *output;
     float *l1_out, *relu_out, *l2_out;
     float *l2_error, *l1_error, *relu_error;
 
+    std::chrono::steady_clock::time_point begin, end;
+    begin = std::chrono::steady_clock::now();
     std::cout << "===TRAINING===" << std::endl;
 
     for (int i = 0; i < n_epochs; i++) {
@@ -234,6 +229,8 @@ int main() {
     }
 
     std::cout << "===TRAINING COMPLETE===" << std::endl;
+    end = std::chrono::steady_clock::now();
+    std::cout << "Training time: " << (std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()) / 1000000.0f << "s" << std::endl;
 
     int last_test_batch = data_size / BATCH_SIZE;
     int first_test_batch = train_test_split / BATCH_SIZE;
