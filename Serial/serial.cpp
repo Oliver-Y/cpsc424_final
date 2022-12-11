@@ -155,7 +155,7 @@ float accuracy(float *output, float *target, int n_out) {
 }
 
 int main() {
-    int n_in = 784, n_hidden = 256, n_out = 10, n_epochs = 5;
+    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 5;
     float lr = (128.0/n_hidden)*0.001;
     int data_size;
 
@@ -163,7 +163,7 @@ int main() {
     vector<float> y_train;
     load_mnist(x_train, y_train, &data_size);
 
-    std::cout << "Training data size: " << data_size << std::endl;
+    cout << "Data size: " << data_size << endl;
 
     int train_test_split = (int)(0.9 * data_size);
 
@@ -184,17 +184,23 @@ int main() {
     float *l1_out, *relu_out, *l2_out;
     float *l2_error, *l1_error, *relu_error;
 
-    std::chrono::steady_clock::time_point begin, end;
-    begin = std::chrono::steady_clock::now();
-    std::cout << "===TRAINING===" << std::endl;
+    float forward_time = 0, backprop_time = 0;
+    chrono::steady_clock::time_point begin, end;
+    chrono::steady_clock::time_point b, e;
+
+    begin = chrono::steady_clock::now();
+    cout << "===TRAINING===" << endl;
 
     for (int i = 0; i < n_epochs; i++) {
-        std::cout << "EPOCH" << i << "\n";
+        cout << "Epoch " << i << "\n";
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
             input = &x_train[batch * BATCH_SIZE * n_in];
             target = &y_train[batch * BATCH_SIZE * n_out];
-
+            
             // FORWARD PROPAGATION STEP
+
+            b = chrono::steady_clock::now();
+
             l1_out = new float[n_hidden * BATCH_SIZE];
             linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
 
@@ -209,8 +215,15 @@ int main() {
 
             error = 0;
             CE_forward_cpu(target, output, &error, n_out);
-            
+
+            e = chrono::steady_clock::now();
+            forward_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
+
+
             // BACK PROPAGATION STEP
+
+            b = chrono::steady_clock::now();
+
             l2_error = new float[BATCH_SIZE * n_out];
             softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
@@ -223,14 +236,22 @@ int main() {
             linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
             linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
 
-            std::cout << "error: " << error << std::endl;
+            e = chrono::steady_clock::now();
+            backprop_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
 
+            // cout << "error: " << error << endl;
         }
     }
 
-    std::cout << "===TRAINING COMPLETE===" << std::endl;
-    end = std::chrono::steady_clock::now();
-    std::cout << "Training time: " << (std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()) / 1000000.0f << "s" << std::endl;
+    cout << "===TRAINING COMPLETE===" << endl;
+    end = chrono::steady_clock::now();
+    cout << "Training time: " << (chrono::duration_cast<chrono::microseconds>(end - begin).count()) / 1000000.0f << "s" << endl;
+    cout << "Forward propagation time: " << forward_time / 1000000.0f << "s" << endl;
+    cout << "Backpropagation time: " << backprop_time / 1000000.0f << "s" << endl;
+
+
+    cout << "===TESTING===" << endl;
+
 
     int last_test_batch = data_size / BATCH_SIZE;
     int first_test_batch = train_test_split / BATCH_SIZE;
@@ -261,8 +282,8 @@ int main() {
     avg_err /= (last_test_batch - first_test_batch);
     avg_acc /= (last_test_batch - first_test_batch);
 
-    std::cout << "TEST avg error: " << avg_err << std::endl;
-    std::cout << "TEST avg accuracy: " << avg_acc << std::endl;
+    cout << "TEST avg error: " << avg_err << endl;
+    cout << "TEST avg accuracy: " << avg_acc << endl;
 
     return 0;
 }
