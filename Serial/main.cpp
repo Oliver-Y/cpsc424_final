@@ -9,37 +9,27 @@
 
 using namespace std;
 
-void mse_forward_cpu(float *truth, float *predict, float *error, int n_out) {
-    for (int i = 0; i < n_out; i++) {
-        *error += (truth[i] - predict[i]) * (truth[i] - predict[i]) / n_out;
-    }
-}
-
-void mse_backprop_cpu(float *truth, float *predict, float *error, int n_out) {
-    for (int i = 0; i < n_out; i++) {
-        error[i] = 2 * (predict[i] - truth[i]) / n_out;
-    }
-}
+#define BATCH_SIZE 64
 
 float max(float t1, float t2) {
     return t1 < t2 ? t2 : t1;
 }
 
-void CE_forward_cpu(float *truth, float *predict, float *error, int n_out, int batch_size) {
-    for (int i = 0; i < n_out * batch_size; i++) {
-        *error += -truth[i] * log(max(predict[i], 0.0001)) / batch_size;
+void CE_forward_cpu(float *truth, float *predict, float *error, int n_out) {
+    for (int i = 0; i < n_out * BATCH_SIZE; i++) {
+        *error += -truth[i] * log(max(predict[i], 0.0001)) / BATCH_SIZE;
     }
 }
 
-void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_out, int batch_size) {
-    for (int i = 0; i < n_out * batch_size; i++) {
+void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_out) {
+    for (int i = 0; i < n_out * BATCH_SIZE; i++) {
         error[i] = predict[i] - truth[i];
     }
 }
 
-void softmax_forward_cpu(float *in, float *out, int n_out, int batch_size) {
+void softmax_forward_cpu(float *in, float *out, int n_out) {
     float sum_exp;
-    for (int sample = 0; sample < batch_size; sample++) {
+    for (int sample = 0; sample < BATCH_SIZE; sample++) {
         sum_exp = 0.0;
         float max_ = -10000;
         for (int j = 0; j < n_out; j++) {
@@ -59,11 +49,11 @@ void softmax_forward_cpu(float *in, float *out, int n_out, int batch_size) {
     }
 }
 
-void linear_forward_cpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out, int batch_size) {
+void linear_forward_cpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
     int in_index, out_index, weights_index;
-    // in = (n_in * batch_size), out = (n_out * batch_size), weights = (n_in * n_out)
+    // in = (n_in * BATCH_SIZE), out = (n_out * BATCH_SIZE), weights = (n_in * n_out)
     // generate outputs for each sample in batch
-    for (int sample = 0; sample < batch_size; sample++) {
+    for (int sample = 0; sample < BATCH_SIZE; sample++) {
         // matrix multiply input by weights
         for (int j = 0; j < n_out; j++) {
             out_index = sample * n_out + j;
@@ -78,12 +68,12 @@ void linear_forward_cpu(float *in, float *out, float *weights, float *bias, int 
     }
 }
 
-void linear_backprop_cpu(float *errors, float *out_errors, float *weights, int n_in, int n_out, int batch_size) {
+void linear_backprop_cpu(float *errors, float *out_errors, float *weights, int n_in, int n_out) {
     int errors_index, out_errors_index, weights_index;
 
     // Error at prev layer = matmul of weights with error at curr layer
-    // errors = (n_out * batch_size), out_errors = (n_in * batch_size), weights = (n_in * n_out)
-    for (int sample = 0; sample < batch_size; sample++) {
+    // errors = (n_out * BATCH_SIZE), out_errors = (n_in * BATCH_SIZE), weights = (n_in * n_out)
+    for (int sample = 0; sample < BATCH_SIZE; sample++) {
         for (int i = 0; i < n_in; i++) {
             out_errors_index = sample * n_in + i;
             for (int j = 0; j < n_out; j++) {
@@ -95,23 +85,23 @@ void linear_backprop_cpu(float *errors, float *out_errors, float *weights, int n
     }
 }
 
-void linear_update_cpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, int batch_size, float lr) {
+void linear_update_cpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, float lr) {
     int in_index, errors_index, weights_index;
-    for (int sample = 0; sample < batch_size; sample++) {
+    for (int sample = 0; sample < BATCH_SIZE; sample++) {
         for (int j = 0; j < n_out; j++) {
             errors_index = sample * n_out + j;
-            bias[j] -= lr / batch_size * errors[errors_index];
+            bias[j] -= lr / BATCH_SIZE * errors[errors_index];
             for (int i = 0; i < n_in; i++) {
                 in_index = sample * n_in + i;
                 weights_index = i * n_out + j;
-                weights[weights_index] -= lr / batch_size * errors[errors_index] * in[in_index];
+                weights[weights_index] -= lr / BATCH_SIZE * errors[errors_index] * in[in_index];
             }
         }
     }
 }
 
 void relu_forward_cpu(float *in, float *out, int n_out) {
-    for (int j = 0; j < n_out; j++) {
+    for (int j = 0; j < n_out * BATCH_SIZE; j++) {
         if (in[j] > 0) {
             out[j] = in[j];
         } else {
@@ -121,7 +111,7 @@ void relu_forward_cpu(float *in, float *out, int n_out) {
 }
 
 void relu_backprop_cpu(float *in, float *error, float *error_out, int n_out) {
-    for (int j = 0; j < n_out; j++) {
+    for (int j = 0; j < n_out * BATCH_SIZE; j++) {
         if (in[j] > 0) {
             error_out[j] = error[j];
         } else {
@@ -136,44 +126,15 @@ void init_zero(float *a, int n) {
     }
 }
 
-void set_eq(float *a, float *b, int n) {
-    for (int i = 0; i < n; i++) {
-        a[i] = b[i];
-    }
-}
-
 void kaiming_init(float *w, int n_in, int n_out) {
     float std = sqrt(2 / (float)n_in);
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<float> dist(0.0f, std);
+    random_device rd;
+    mt19937 gen(rd());
+    normal_distribution<float> dist(0.0f, std);
 
     for (int i = 0; i < n_in * n_out; i++) {
         w[i] = dist(gen);
-    }
-}
-
-void fill_array(float *a, int n) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<float> dist(0.0f, 1.0f);
-
-    for (int i = 0; i < n; i++) {
-        a[i] = dist(gen);
-    }
-}
-
-void fill_array_category(float *a, int n, int n_out) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dist(0, n_out - 1);
-
-    for (int i = 0; i < n; i++) {
-        int ind = dist(gen);
-        for (int j = 0; j < n_out; j++) {
-            a[i * n_out + j] = (j == ind) ? 1 : 0;
-        }
     }
 }
 
@@ -223,8 +184,30 @@ vector<float> operator/(const vector<float> &m2, const float m1) {
     return product;
 }
 
+float accuracy(float *output, float *target, int n_out) {
+    float acc = 0;
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        float max_prob = 0;
+        int pred_digit = 0;
+        int target_digit = 0;
+        for (int j = 0; j < n_out; j++) {
+            if (output[i * n_out + j] > max_prob) {
+                max_prob = output[i * n_out + j];
+                pred_digit = j;
+            }
+            if (target[i * n_out + j] > 0.5) {
+                target_digit = j;
+            }
+        }
+        if (pred_digit == target_digit) {
+            acc += 1;
+        }
+    }
+    return acc / BATCH_SIZE;
+}
+
 int main() {
-    int batch_size = 64, n_in = 784, n_epochs = 10;
+    int n_in = 784, n_epochs = 1;
     float lr = 0.005;
     int n_hidden = 128;
     int n_out = 10;
@@ -248,7 +231,6 @@ int main() {
                     y_train.push_back(0.);
                 }
             }
-
             int size = static_cast<int>(line_v.size());
             for (unsigned i = 1; i < size; ++i) {
                 x_train.push_back(strtof((line_v[i]).c_str(), 0));
@@ -260,19 +242,13 @@ int main() {
         myfile.close();
     }
 
-    std::cout << y_train.size() << "\n";
-
-    std::cout << x_train.size() << "\n";
-
     int data_size = y_train.size() / n_out;
+    std::cout << data_size << std::endl;
 
-    // int data_size = 10000;
-    // float *x_train = new float[data_size * n_in], *y_train = new float[data_size * n_out];
-    // fill_array(x_train, data_size * n_in);
-    // fill_array_category(y_train, data_size, n_out);
+    int train_test_split = (int)(0.9 * data_size);
+    std::cout << train_test_split << std::endl;
 
     float *input, *target, *output;
-
 
     float *l1_weights = new float[n_in * n_hidden];
     float *l1_bias = new float[n_hidden];
@@ -280,159 +256,87 @@ int main() {
     float *l2_weights = new float[n_hidden * n_out];
     float *l2_bias = new float[n_out];
 
-    //    for (int j = 0; j < batch_size; j++) {
-    //        for (int k = 0; k < n_in; k++) {
-    //            std::cout << x_train[j * n_in + k] << " ";
-    //        }
-    //        std::cout << "\n";
-    //    }
-
     kaiming_init(l1_weights, n_in, n_hidden);
     init_zero(l1_bias, n_hidden);
 
     kaiming_init(l2_weights, n_hidden, n_out);
     init_zero(l2_bias, n_out);
 
+    float error;
+    float *l1_out, *relu_out, *l2_out;
+    float *l2_error, *l1_error, *relu_error;
+
+    std::cout << "===TRAINING===" << std::endl;
+
     for (int i = 0; i < n_epochs; i++) {
         std::cout << "EPOCH" << i << "\n";
-        float error;
-        float *output_error, *l1_error;
-        for (int batch = 0; batch < data_size / batch_size -2 ; batch++) {
-            input = &x_train[batch * batch_size * n_in];
-            target = &y_train[batch * batch_size * n_out];
+        for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
+            input = &x_train[batch * BATCH_SIZE * n_in];
+            target = &y_train[batch * BATCH_SIZE * n_out];
 
-            // float *hidden_out = new float[n_hidden * batch_size];
-            // linear_forward_cpu(input, hidden_out, l1_weights, l1_bias, n_in, n_hidden, batch_size);
+            l1_out = new float[n_hidden * BATCH_SIZE];
+            linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
 
-            // float *hidden_activation = new float[n_hidden * batch_size];
-            // relu_forward_cpu(hidden_out, hidden_activation, n_hidden * batch_size);
+            relu_out = new float[n_hidden * BATCH_SIZE];
+            relu_forward_cpu(l1_out, relu_out, n_hidden);
 
-            // output = new float[batch_size * n_out];
-            // linear_forward_cpu(hidden_activation, output, l2_weights, l2_bias, n_hidden, n_out, batch_size);
+            l2_out = new float[BATCH_SIZE * n_out];
+            linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
 
-            // error=0;
-            // mse_forward_cpu(target, output, &error, batch_size * n_out);
-
-            // float *output_error = new float[batch_size * n_out];
-            // mse_backprop_cpu(target, output, output_error, batch_size * n_out);
-
-            // float *activation_errors = new float[n_hidden * batch_size];
-            // linear_backprop_cpu(output_error, activation_errors, l2_weights, n_hidden, n_out, batch_size);
-
-            // linear_update_cpu(hidden_activation, output_error, l2_weights, l2_bias, n_hidden, n_out, batch_size, 0.1);
-
-            // float *l1_error = new float[n_hidden * batch_size];
-            // relu_backprop_cpu(hidden_out, activation_errors, l1_error, n_hidden);
-
-            // linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, batch_size, 0.1);
-
-            float *hidden_out = new float[n_hidden * batch_size];
-            linear_forward_cpu(input, hidden_out, l1_weights, l1_bias, n_in, n_hidden, batch_size);
-
-            float *hidden_activation = new float[n_hidden * batch_size];
-            relu_forward_cpu(hidden_out, hidden_activation, n_hidden * batch_size);
-
-            float *softmax_input = new float[batch_size * n_out];
-            linear_forward_cpu(hidden_activation, softmax_input, l2_weights, l2_bias, n_hidden, n_out, batch_size);
-
-            output = new float[batch_size * n_out];
-            softmax_forward_cpu(softmax_input, output, n_out, batch_size);
+            output = new float[BATCH_SIZE * n_out];
+            softmax_forward_cpu(l2_out, output, n_out);
 
             error = 0;
-            CE_forward_cpu(target, output, &error, n_out, batch_size);
-
-            if (isnan(error)) {
-                for (int j = 0; j < n_hidden * n_out; j++) {
-                    std::cout << l2_weights[j] << " ";
-                }
-                std::cout << "===========\n\n\n"
-                          << std::endl;
-
-                for (int j = 0; j < batch_size * n_out; j++) {
-                    std::cout << output_error[j] << " ";
-                }
-                return 0;
-            }
-
+            CE_forward_cpu(target, output, &error, n_out);
             std::cout << "error: " << error << std::endl;
 
-            output_error = new float[batch_size * n_out];
-            softmax_CE_backprop_cpu(target, output, output_error, n_out, batch_size);
+            l2_error = new float[BATCH_SIZE * n_out];
+            softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
-            //    for (int j = 0; j < 10; j++) {
-            //        std::cout << l2_weights[j] << " ";
-            //    }
-            float *activation_errors = new float[n_hidden * batch_size];
-            linear_backprop_cpu(output_error, activation_errors, l2_weights, n_hidden, n_out, batch_size);
+            relu_error = new float[n_hidden * BATCH_SIZE];
+            linear_backprop_cpu(l2_error, relu_error, l2_weights, n_hidden, n_out);
 
-            linear_update_cpu(hidden_activation, output_error, l2_weights, l2_bias, n_hidden, n_out, batch_size, lr);
+            l1_error = new float[n_hidden * BATCH_SIZE];
+            relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
 
-            //    for(int j =0; j < 20; j++){
-            //        std::cout << activation_errors[j] << " ";
-            //    }
-            l1_error = new float[n_hidden * batch_size];
-            relu_backprop_cpu(hidden_out, activation_errors, l1_error, n_hidden * batch_size);
-
-            //    for(int j =0; j < 20; j++){
-            //        std::cout << l1_weights[j] << " ";
-            //    }
-
-            linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, batch_size, lr);
-            // for(int j =0; j < batch_size * n_hidden; j++){
-            //     std::cout << l1_error[j] << " ";
-            // }
+            linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
+            linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
         }
-        // std::cout << "error: " << error << std::endl;
     }
 
-    input = &x_train[(data_size / batch_size -1) * batch_size * n_in];
-    target = &y_train[(data_size / batch_size -1) * batch_size * n_out];
+    std::cout << "===TRAINING COMPLETE===" << std::endl;
 
-    float *hidden_out = new float[n_hidden * batch_size];
+    int last_test_batch = data_size / BATCH_SIZE;
+    int first_test_batch = train_test_split / BATCH_SIZE;
+    float avg_acc = 0.;
+    float avg_err = 0.;
 
-    linear_forward_cpu(input, hidden_out, l1_weights, l1_bias, n_in, n_hidden, batch_size);
+    for (int batch = first_test_batch; batch < last_test_batch; batch++) {
+        input = &x_train[batch * BATCH_SIZE * n_in];
+        target = &y_train[batch * BATCH_SIZE * n_out];
 
-    float *hidden_activation = new float[n_hidden * batch_size];
-    relu_forward_cpu(hidden_out, hidden_activation, n_hidden * batch_size);
+        l1_out = new float[n_hidden * BATCH_SIZE];
+        linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
 
-    float *softmax_input = new float[batch_size * n_out];
-    linear_forward_cpu(hidden_activation, softmax_input, l2_weights, l2_bias, n_hidden, n_out, batch_size);
+        relu_out = new float[n_hidden * BATCH_SIZE];
+        relu_forward_cpu(l1_out, relu_out, n_hidden);
 
-    output = new float[batch_size * n_out];
-    softmax_forward_cpu(softmax_input, output, n_out, batch_size);
+        l2_out = new float[BATCH_SIZE * n_out];
+        linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
 
-    float error = 0;
-    CE_forward_cpu(target, output, &error, n_out, batch_size);
+        output = new float[BATCH_SIZE * n_out];
+        softmax_forward_cpu(l2_out, output, n_out);
 
-    float accuracy = 0;
-    for (int i = 0; i < batch_size; i++) {
-        float max_1 = 0;
-        int max_1_ind = 0;
-        float max_2 = 0;
-        int max_2_ind = 0;
-        for (int j = 0; j < 10; j++) {
-            if (output[i * 10 + j] > max_1) {
-                max_1 = output[i * 10 + j];
-                max_1_ind = j;
-            }
-            if (target[i * 10 + j] > max_2) {
-                max_2 = target[i * 10 + j];
-                max_2_ind = j;
-            }
-        }
-        // std::cout << "\n"
-        //           << std::endl;
-        if (max_1_ind == max_2_ind) {
-            accuracy += 1;
-        }
-        // else{
-        //     std::cout << max_1 << std::endl;
-        // }
-        // std::cout << "\n";
-        // std::cout << max_1_ind << " " << max_2_ind << " " << max_1 << std::endl;
-        // std::cout << "\n";
+        error = 0;
+        CE_forward_cpu(target, output, &error, n_out);
+        avg_err += error;
+        avg_acc += accuracy(output, target, n_out);
     }
-    std::cout << "TEST error: " << error << std::endl;
-    std::cout << "TEST accuracy: " << accuracy / batch_size << std::endl;
+    avg_err /= (last_test_batch - first_test_batch);
+    avg_acc /= (last_test_batch - first_test_batch);
+
+    std::cout << "TEST avg error: " << avg_err << std::endl;
+    std::cout << "TEST avg accuracy: " << avg_acc << std::endl;
+
     return 0;
 }

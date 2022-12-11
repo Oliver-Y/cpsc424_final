@@ -12,3 +12,5 @@ Serial/main.dSYM*
 *.out
 *.app
 *.vscode
+
+*.DS_store
