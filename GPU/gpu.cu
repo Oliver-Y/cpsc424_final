@@ -128,6 +128,37 @@ __global__ void linear_forward_gpu(float *in, float *out, float *weights, float 
     }
 }
 
+__global__ void linear_backprop_gpu(float *errors, float *out_errors, float *weights, int n_in, int n_out) {
+    int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
+    int errors_index, out_errors_index, weights_index;
+
+    if ((row < BATCH_SIZE) && (col < n_out)){
+        errors_index = row*n_out + col;
+        for (int i=0; i<n_in; i++){
+            out_errors_index = row*n_in + i;
+            weights_index = i*n_out + col;
+            atomicAdd(&out_errors[out_errors_index], weights[weights_index]*errors[errors_index]);
+        }
+    }
+}
+
+
+__global__ void linear_update_gpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, float lr) {
+    int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
+    int in_index, errors_index, weights_index;
+
+    if ((row < BATCH_SIZE) && (col < n_out)){
+        errors_index = row*n_out + col;
+        atomicAdd(&bias[col], -lr / BATCH_SIZE *errors[errors_index]);
+        for (int i=0; i<n_in; i++){
+            in_index = row*n_in + i;
+            weights_index = i*n_out + col;
+            atomicAdd(&weights[weights_index], -lr / BATCH_SIZE *in[in_index]*errors[errors_index]);
+        }
+    }
+}
+
+
 void linear_forward_cpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
     int in_index, out_index, weights_index;
     // in = (n_in * BATCH_SIZE), out = (n_out * BATCH_SIZE), weights = (n_in * n_out)
@@ -183,6 +214,17 @@ __global__ void relu_forward_gpu(float *in, float *out, int n_out){
     int index = blockDim.x*blockIdx.x + threadIdx.x;
     if (index < n_out * BATCH_SIZE){
         out[index] = fmaxf(0.2*in[index], in[index]);
+    }
+}
+
+__global__ void relu_backward_gpu(float *in, float *error, float *error_out, int n_out){
+    int index = blockDim.x*blockIdx.x + threadIdx.x;
+    if (index < n_out * BATCH_SIZE){
+        if (in[index] > 0) {
+            error_out[index] = error[index];
+        } else {
+            error_out[index] = 0.2 * error[index];
+        }
     }
 }
 
@@ -312,7 +354,12 @@ int main() {
     cudaMallocManaged(&relu_out, n_hidden * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&input, n_in * BATCH_SIZE*sizeof(float));
 
-    // set_eq(input, &x_train[0], n_in * data_size);
+
+
+    cudaMallocManaged(&l1_error, n_hidden * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&l2_error, n_out * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&relu_error, n_hidden * BATCH_SIZE*sizeof(float));
+
 
     float forward_time = 0, backprop_time = 0;
     chrono::steady_clock::time_point begin, end;
@@ -320,7 +367,6 @@ int main() {
 
     begin = chrono::steady_clock::now();
     cout << "===TRAINING===" << endl;
-    // set_eq(input, &x_train[0], n_in * BATCH_SIZE);
 
     for (int i = 0; i < n_epochs; i++) {
         cout << "Epoch " << i << "\n";
@@ -330,7 +376,6 @@ int main() {
             set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
 
             // FORWARD PROPAGATION STEP
-
             b = chrono::steady_clock::now();
 
             // l1_out = new float[n_hidden * BATCH_SIZE];
@@ -360,17 +405,28 @@ int main() {
 
             b = chrono::steady_clock::now();
 
-            l2_error = new float[BATCH_SIZE * n_out]();
+            // l2_error = new float[BATCH_SIZE * n_out]();
+            init_zero(l2_error, BATCH_SIZE * n_out);
             softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
-            relu_error = new float[n_hidden * BATCH_SIZE]();
+            // relu_error = new float[n_hidden * BATCH_SIZE]();
+            init_zero(relu_error, BATCH_SIZE * n_hidden);
             linear_backprop_cpu(l2_error, relu_error, l2_weights, n_hidden, n_out);
+            linear_backprop_gpu<<<l2_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
 
-            l1_error = new float[n_hidden * BATCH_SIZE]();
-            relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
+            // l1_error = new float[n_hidden * BATCH_SIZE]();
+            // cudaDeviceSynchronize();
 
-            linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
-            linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
+            // relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
+            relu_backward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_error, l1_error, n_hidden);
+            // cudaDeviceSynchronize();
+
+            linear_update_gpu<<<l2_grid, Block>>>(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
+            linear_update_gpu<<<l1_grid, Block>>>(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
+            cudaDeviceSynchronize();
+
+            // linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
+            // linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
 
             e = chrono::steady_clock::now();
             backprop_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
