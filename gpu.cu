@@ -1,84 +1,17 @@
 #include <chrono>
 #include <cmath>
 #include <random>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <vector>
 #include <cuda.h>
-// #include "load_mnist.h"
+
+#include "load_mnist.h"
 
 using namespace std;
 
 #define BATCH_SIZE 32
 #define BLOCK_SIZE 32
 
-// float max(float t1, float t2) {
-//     return t1 < t2 ? t2 : t1;
-// }
-
-
-vector<string> split(const string &s, char delim) {
-    stringstream ss(s);
-    string item;
-    vector<string> tokens;
-    while (getline(ss, item, delim)) {
-        tokens.push_back(item);
-    }
-    return tokens;
-}
-
-vector<float> operator-(const vector<float> &m1, const float m2) {
-    const unsigned long VECTOR_SIZE = m1.size();
-    vector<float> difference(VECTOR_SIZE);
-
-    for (unsigned i = 0; i != VECTOR_SIZE; ++i) {
-        difference[i] = m1[i] - m2;
-    };
-
-    return difference;
-}
-
-vector<float> operator/(const vector<float> &m2, const float m1) {
-    const unsigned long VECTOR_SIZE = m2.size();
-    vector<float> product(VECTOR_SIZE);
-
-    for (unsigned i = 0; i != VECTOR_SIZE; ++i) {
-        product[i] = m2[i] / m1;
-    };
-    return product;
-}
-
-void load_mnist(vector<float> &x_train, vector<float> &y_train, int *data_size) {
-    string line;
-    vector<string> line_v;
-
-    cout << "Loading data ...\n";
-
-    ifstream myfile("train.txt");
-    if (myfile.is_open()) {
-        while (getline(myfile, line)) {
-            line_v = split(line, '\t');
-            int digit = strtof((line_v[0]).c_str(), 0);
-            for (unsigned i = 0; i < 10; ++i) {
-                if (i == digit) {
-                    y_train.push_back(1.);
-                } else {
-                    y_train.push_back(0.);
-                }
-            }
-            int size = static_cast<int>(line_v.size());
-            for (unsigned i = 1; i < size; ++i) {
-                x_train.push_back(strtof((line_v[i]).c_str(), 0));
-            }
-        }
-        x_train = x_train / 255.0;
-        x_train = x_train - 0.1307;
-        x_train = x_train / 0.3081;
-        myfile.close();
-    }
-    *data_size = y_train.size() / 10;
+float max(float t1, float t2) {
+    return t1 < t2 ? t2 : t1;
 }
 
 void CE_forward_cpu(float *truth, float *predict, float *error, int n_out) {
@@ -103,7 +36,6 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
         }
         for (int j = 0; j < n_out; j++) {
             float e = exp(in[sample * n_out + j] - max_);
-            //Want this to be shared
             sum_exp += e;
             out[sample * n_out + j] = e;
         }
@@ -112,27 +44,6 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
         }
     }
 }
-
-__global__ void softmax_forward_gpu(float *in, float* out, int n_out){
-    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
-    float sum_exp = 0.0; 
-    float max_ = -10000; 
-    if((row < BATCH_SIZE) && (col < n_out)){
-        int out_index = row * n_out + col; 
-        int in_index = row * n_out + col; 
-        //Everyone loads it into shared memory 
-        for(int i = 0; i < n_out; ++i){
-            max_ = max(max_, in[row * n_out + i]); 
-        }
-        for(int i = 0; i < n_out; ++i){
-            float e = exp(in[row * n_out + i] - max_);
-            sum_exp += e; 
-        }
-        out[out_index] = exp(in[in_index] - max_);
-        out[out_index] /= sum_exp;
-    }
-}
-
 
 __global__ void linear_forward_gpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
     int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
@@ -149,37 +60,6 @@ __global__ void linear_forward_gpu(float *in, float *out, float *weights, float 
         }
     }
 }
-
-__global__ void linear_backprop_gpu(float *errors, float *out_errors, float *weights, int n_in, int n_out) {
-    int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
-    int errors_index, out_errors_index, weights_index;
-
-    if ((row < BATCH_SIZE) && (col < n_out)){
-        errors_index = row*n_out + col;
-        for (int i=0; i<n_in; i++){
-            out_errors_index = row*n_in + i;
-            weights_index = i*n_out + col;
-            atomicAdd(&out_errors[out_errors_index], weights[weights_index]*errors[errors_index]);
-        }
-    }
-}
-
-
-__global__ void linear_update_gpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, float lr) {
-    int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
-    int in_index, errors_index, weights_index;
-
-    if ((row < BATCH_SIZE) && (col < n_out)){
-        errors_index = row*n_out + col;
-        atomicAdd(&bias[col], -lr / BATCH_SIZE *errors[errors_index]);
-        for (int i=0; i<n_in; i++){
-            in_index = row*n_in + i;
-            weights_index = i*n_out + col;
-            atomicAdd(&weights[weights_index], -lr / BATCH_SIZE *in[in_index]*errors[errors_index]);
-        }
-    }
-}
-
 
 void linear_forward_cpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
     int in_index, out_index, weights_index;
@@ -231,25 +111,6 @@ void linear_update_cpu(float *in, float *errors, float *weights, float *bias, in
         }
     }
 }
-
-__global__ void relu_forward_gpu(float *in, float *out, int n_out){
-    int index = blockDim.x*blockIdx.x + threadIdx.x;
-    if (index < n_out * BATCH_SIZE){
-        out[index] = fmaxf(0.2*in[index], in[index]);
-    }
-}
-
-__global__ void relu_backward_gpu(float *in, float *error, float *error_out, int n_out){
-    int index = blockDim.x*blockIdx.x + threadIdx.x;
-    if (index < n_out * BATCH_SIZE){
-        if (in[index] > 0) {
-            error_out[index] = error[index];
-        } else {
-            error_out[index] = 0.2 * error[index];
-        }
-    }
-}
-
 
 void relu_forward_cpu(float *in, float *out, int n_out) {
     for (int j = 0; j < n_out * BATCH_SIZE; j++) {
@@ -318,7 +179,7 @@ void set_eq(float *a, float *b, int n){
 }
 
 int main() {
-    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 5;
+    int n_in = 784, n_hidden = 256, n_out = 10, n_epochs = 5;
     float lr = (128.0 / n_hidden) * 0.001;
     int data_size;
 
@@ -327,9 +188,9 @@ int main() {
     load_mnist(x_train, y_train, &data_size);
 
     cout << "Data size: " << data_size << endl;
-    cout << "Hidden layer size: "<< n_hidden << endl;
 
     int train_test_split = (int)(0.9 * data_size);
+
 
 
     float *l1_weights, *l1_bias, *l2_weights , *l2_bias;
@@ -342,17 +203,16 @@ int main() {
     cudaMallocManaged(&l2_bias, n_out*sizeof(float));
 
 
-    int n_block_rows = (BATCH_SIZE-1) / BLOCK_SIZE + 1;
-    int l1_block_cols = (n_hidden - 1) / BLOCK_SIZE +1;
-    int l2_block_cols = (n_out - 1) / BLOCK_SIZE +1;
-    int relu_blocks = (n_hidden * BATCH_SIZE - 1) / BLOCK_SIZE+1;
+    n_block_rows = (BATCH_SIZE-1) / block_size + 1;
+    l1_block_cols = (n_hidden - 1) / block_size +1;
+
+    l2_block_cols = (n_out - 1) / block_size +1;
 
     dim3 l1_grid(n_block_rows, l1_block_cols);
     dim3 l2_grid(n_block_rows, l2_block_cols);
 
     dim3 Block(BLOCK_SIZE, BLOCK_SIZE);
 
-    cout << "row: "<< n_block_rows << " l1_cols: " << l1_block_cols << " l2_col: " << l2_block_cols << endl;
     // float *l1_weights = new float[n_in * n_hidden];
     // float *l1_bias = new float[n_hidden];
 
@@ -377,12 +237,6 @@ int main() {
     cudaMallocManaged(&input, n_in * BATCH_SIZE*sizeof(float));
 
 
-
-    cudaMallocManaged(&l1_error, n_hidden * BATCH_SIZE*sizeof(float));
-    cudaMallocManaged(&l2_error, n_out * BATCH_SIZE*sizeof(float));
-    cudaMallocManaged(&relu_error, n_hidden * BATCH_SIZE*sizeof(float));
-
-
     float forward_time = 0, backprop_time = 0;
     chrono::steady_clock::time_point begin, end;
     chrono::steady_clock::time_point b, e;
@@ -393,32 +247,31 @@ int main() {
     for (int i = 0; i < n_epochs; i++) {
         cout << "Epoch " << i << "\n";
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
+            set_eq(input, &x_train[batch * BATCH_SIZE * n_in], BATCH_SIZE);
             // input = &x_train[batch * BATCH_SIZE * n_in];
             target = &y_train[batch * BATCH_SIZE * n_out];
-            set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
 
             // FORWARD PROPAGATION STEP
+
             b = chrono::steady_clock::now();
 
             // l1_out = new float[n_hidden * BATCH_SIZE];
             // linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
             linear_forward_gpu<<<l1_grid, Block>>>(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
-            // cudaDeviceSynchronize();
+            cudaDeviceSynchronize();
+
 
             // relu_out = new float[n_hidden * BATCH_SIZE];
-            // relu_forward_cpu(l1_out, relu_out, n_hidden);
-            relu_forward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_out, n_hidden);
+            relu_forward_cpu(l1_out, relu_out, n_hidden);
 
             // l2_out = new float[BATCH_SIZE * n_out];
             // linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
             linear_forward_gpu<<<l2_grid, Block>>>(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
             cudaDeviceSynchronize();
 
+
             output = new float[BATCH_SIZE * n_out];
-            cudaMallocManaged(&output, n_out * BATCH_SIZE*sizeof(float));
-            //softmax_forward_cpu(l2_out,output,n_out); 
-            softmax_forward_gpu<<<l2_grid, Block>>>(l2_out, output, n_out);
-            cudaDeviceSynchronize();
+            softmax_forward_cpu(l2_out, output, n_out);
 
             error = 0;
             CE_forward_cpu(target, output, &error, n_out);
@@ -430,35 +283,23 @@ int main() {
 
             b = chrono::steady_clock::now();
 
-            // l2_error = new float[BATCH_SIZE * n_out]();
-            init_zero(l2_error, BATCH_SIZE * n_out);
+            l2_error = new float[BATCH_SIZE * n_out]();
             softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
-            // relu_error = new float[n_hidden * BATCH_SIZE]();
-            init_zero(relu_error, BATCH_SIZE * n_hidden);
+            relu_error = new float[n_hidden * BATCH_SIZE]();
             linear_backprop_cpu(l2_error, relu_error, l2_weights, n_hidden, n_out);
-            linear_backprop_gpu<<<l2_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
 
-            // l1_error = new float[n_hidden * BATCH_SIZE]();
-            // cudaDeviceSynchronize();
+            l1_error = new float[n_hidden * BATCH_SIZE]();
+            relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
 
-            // relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
-            relu_backward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_error, l1_error, n_hidden);
-            // cudaDeviceSynchronize();
-
-            linear_update_gpu<<<l2_grid, Block>>>(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
-            linear_update_gpu<<<l1_grid, Block>>>(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
-            cudaDeviceSynchronize();
-
-            // linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
-            // linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
+            linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
+            linear_update_cpu(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
 
             e = chrono::steady_clock::now();
             backprop_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
 
-            // cout << "error: " << error << endl;
+            cout << "error: " << error << endl;
         }
-        cout << "error: " << error << endl;
     }
 
     cout << "===TRAINING COMPLETE===" << endl;
