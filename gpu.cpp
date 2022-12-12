@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cmath>
 #include <random>
+#include <cuda.h>
 
 #include "load_mnist.h"
 
@@ -39,6 +40,22 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
         }
         for (int j = 0; j < n_out; j++) {
             out[sample * n_out + j] /= sum_exp;
+        }
+    }
+}
+
+__global__ void linear_forward_gpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
+    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
+    int in_index, weights_index, out_index;
+
+    if ((row < BATCH_SIZE) && (col < n_out)) {
+        out_index = row * n_out + col;
+        out[out_index] = bias[col];
+
+        for (int i = 0; i < n_in; i++) {
+            in_index = row * n_in + i;
+            weights_index = i * n_out + col;
+            out[out_index] += in[in_index] * weights[weights_index];
         }
     }
 }
@@ -156,7 +173,7 @@ float accuracy(float *output, float *target, int n_out) {
 
 int main() {
     int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 5;
-    float lr = (128.0/n_hidden)*0.001;
+    float lr = (128.0 / n_hidden) * 0.001;
     int data_size;
 
     vector<float> x_train;
@@ -196,7 +213,7 @@ int main() {
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
             input = &x_train[batch * BATCH_SIZE * n_in];
             target = &y_train[batch * BATCH_SIZE * n_out];
-            
+
             // FORWARD PROPAGATION STEP
 
             b = chrono::steady_clock::now();
@@ -218,7 +235,6 @@ int main() {
 
             e = chrono::steady_clock::now();
             forward_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
-
 
             // BACK PROPAGATION STEP
 
@@ -249,9 +265,7 @@ int main() {
     cout << "Forward propagation time: " << forward_time / 1000000.0f << "s" << endl;
     cout << "Backpropagation time: " << backprop_time / 1000000.0f << "s" << endl;
 
-
     cout << "===TESTING===" << endl;
-
 
     int last_test_batch = data_size / BATCH_SIZE;
     int first_test_batch = train_test_split / BATCH_SIZE;
