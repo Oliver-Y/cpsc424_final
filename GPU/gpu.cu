@@ -11,7 +11,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 64
+#define BATCH_SIZE 32
 #define BLOCK_SIZE 32
 
 vector<string> split(const string &s, char delim) {
@@ -364,7 +364,7 @@ int main(int argc, char *argv[]) {
 
     dim3 Block(BLOCK_SIZE, BLOCK_SIZE);
 
-    cout << "row: "<< n_block_rows << " l1_cols: " << l1_block_cols << " l2_col: " << l2_block_cols << endl;
+    cout << "row: "<< n_block_rows << " l1 cols: " << l1_block_cols << " l2 cols: " << l2_block_cols << endl;
  
     kaiming_init(l1_weights, n_in, n_hidden);
     init_zero(l1_bias, n_hidden);
@@ -421,6 +421,7 @@ int main(int argc, char *argv[]) {
 
             // error = 0;
             // CE_forward_cpu(target, output, &error, n_out);
+            cudaDeviceSynchronize();
 
             e = chrono::steady_clock::now();
             forward_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
@@ -436,10 +437,10 @@ int main(int argc, char *argv[]) {
             linear_update_gpu<<<l2_grid, Block>>>(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
             linear_update_gpu<<<l1_grid, Block>>>(curr_in, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
 
+            cudaDeviceSynchronize();
 
             e = chrono::steady_clock::now();
             backprop_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
-            cudaDeviceSynchronize();
 
             // cout << "error: " << error << endl;
         }
