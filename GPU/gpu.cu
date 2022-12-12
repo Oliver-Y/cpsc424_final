@@ -14,11 +14,6 @@ using namespace std;
 #define BATCH_SIZE 32
 #define BLOCK_SIZE 32
 
-// float max(float t1, float t2) {
-//     return t1 < t2 ? t2 : t1;
-// }
-
-
 vector<string> split(const string &s, char delim) {
     stringstream ss(s);
     string item;
@@ -360,12 +355,7 @@ int main() {
     dim3 Block(BLOCK_SIZE, BLOCK_SIZE);
 
     cout << "row: "<< n_block_rows << " l1_cols: " << l1_block_cols << " l2_col: " << l2_block_cols << endl;
-    // float *l1_weights = new float[n_in * n_hidden];
-    // float *l1_bias = new float[n_hidden];
-
-    // float *l2_weights = new float[n_hidden * n_out];
-    // float *l2_bias = new float[n_out];
-
+ 
     kaiming_init(l1_weights, n_in, n_hidden);
     init_zero(l1_bias, n_hidden);
 
@@ -382,14 +372,17 @@ int main() {
     cudaMallocManaged(&l2_out, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&relu_out, n_hidden * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&input, n_in * BATCH_SIZE*sizeof(float));
-    cudaMallocManaged(&output, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&target, n_out * BATCH_SIZE*sizeof(float));
+
+    cudaMallocManaged(&output, n_out * BATCH_SIZE*sizeof(float));
 
     cudaMallocManaged(&l1_error, n_hidden * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&target, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&l2_error, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&relu_error, n_hidden * BATCH_SIZE*sizeof(float));
 
+    // set_eq(input, &x_train[0], n_in * data_size);
+    // set_eq(target, &y_train[0], n_out * data_size); 
 
     float forward_time = 0, backprop_time = 0;
     chrono::steady_clock::time_point begin, end;
@@ -401,8 +394,10 @@ int main() {
     for (int i = 0; i < n_epochs; i++) {
         cout << "Epoch " << i << "\n";
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
+
             set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
             set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
+            cudaMemset(relu_error, 0, n_hidden * BATCH_SIZE*sizeof(float));
 
             // FORWARD PROPAGATION STEP
             b = chrono::steady_clock::now();
@@ -412,35 +407,31 @@ int main() {
             linear_forward_gpu<<<l2_grid, Block>>>(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
             softmax_forward_gpu<<<l2_grid, Block>>>(l2_out, output, n_out);
 
-            cudaDeviceSynchronize();
-
-            error = 0;
-            CE_forward_cpu(target, output, &error, n_out);
+            // error = 0;
+            // CE_forward_cpu(target, output, &error, n_out);
 
             e = chrono::steady_clock::now();
             forward_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
 
-            // BACK PROPAGATION STEP
+            // BACKPROPAGATION STEP
 
             b = chrono::steady_clock::now();
 
             softmax_CE_backprop_gpu<<<l2_grid,Block>>>(target, output, l2_error, n_out);
-            init_zero(relu_error, BATCH_SIZE * n_hidden);
             linear_backprop_gpu<<<l2_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
             relu_backward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_error, l1_error, n_hidden);
 
             linear_update_gpu<<<l2_grid, Block>>>(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
             linear_update_gpu<<<l1_grid, Block>>>(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
 
-            cudaDeviceSynchronize();
-
 
             e = chrono::steady_clock::now();
             backprop_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
+            cudaDeviceSynchronize();
 
             // cout << "error: " << error << endl;
         }
-        cout << "error: " << error << endl;
+        // cout << "error: " << error << endl;
     }
 
     cout << "===TRAINING COMPLETE===" << endl;
