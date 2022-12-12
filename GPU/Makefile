@@ -7,9 +7,9 @@
 
 NVCC = nvcc
 
-NVCCFLAGS = -O3 -Wno-deprecated-gpu-targets -g
+NVCCFLAGS = -O3 -Wno-deprecated-gpu-targets -g -std=c++11
 
-LFLAGS = -lm -Wno-deprecated-gpu-targets -g
+LFLAGS = -lm -Wno-deprecated-gpu-targets -g -std=c++11
 
 CFLAGS = -std=c++11
 
@@ -24,7 +24,7 @@ BINARIES = gpu
 gpu: gpu.o
 	$(NVCC) $(GENCODE) $(LFLAGS) -o $@ $(CFLAGS) $<
 
-.cu.o:
+.cu.o: 
 	$(NVCC) $(GENCODE) $(NVCCFLAGS) -o $@ $(CFLAGS) -c $<
 
 clean:	
