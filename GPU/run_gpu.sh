@@ -3,8 +3,10 @@
 #SBATCH --nodes=1 
 #SBATCH --ntasks=1 
 #SBATCH --cpus-per-task=5 
-#SBATCH --mem-per-cpu=5G
+#SBATCH --mem-per-cpu=8G
 #SBATCH --partition=gpu
+#SBATCH --job-name=NN_GPU
+#SBATCH --output=%x-%j.out
 #SBATCH --reservation=cpsc424gpu
 #SBATCH -t 15:00
 #SBATCH --gres-flags=enforce-binding
@@ -36,5 +38,24 @@ make clean
 make gpu
 
 echo "***Running"
-./gpu
+
+
+echo ""
+./gpu 32
+echo ""
+
+echo ""
+./gpu 64
+echo ""
+
+echo ""
+./gpu 128
+echo ""
+
+echo ""
+./gpu 256
+
+
+
+
 

@@ -154,8 +154,18 @@ float accuracy(float *output, float *target, int n_out) {
     return acc / BATCH_SIZE;
 }
 
-int main() {
-    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 1;
+int main(int argc, char *argv[]) {
+
+    if (argc != 2)
+    {
+        printf("Usage: serial <n_hidden_layers> \n");
+        exit(-1);
+    }
+
+    int n_hidden = atoi(argv[1]);
+
+
+    int n_in = 784, n_out = 10, n_epochs = 5;
     float lr = (128.0 / n_hidden) * 0.001;
     int data_size;
 
@@ -164,6 +174,8 @@ int main() {
     load_mnist(x_train, y_train, &data_size);
 
     cout << "Data size: " << data_size << endl;
+    cout << "Hidden layer size: "<< n_hidden << endl;
+    cout << "Batch size: "<< BATCH_SIZE << endl;
 
     int train_test_split = (int)(0.9 * data_size);
 
@@ -236,8 +248,8 @@ int main() {
             e = chrono::steady_clock::now();
             backprop_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
 
-            cout << "error: " << error << endl;
         }
+        // cout << "error: " << error << endl;
     }
 
     cout << "===TRAINING COMPLETE===" << endl;

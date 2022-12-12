@@ -11,7 +11,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 32
+#define BATCH_SIZE 64
 #define BLOCK_SIZE 32
 
 vector<string> split(const string &s, char delim) {
@@ -319,8 +319,17 @@ void set_eq(float *a, float *b, int n){
     }
 }
 
-int main() {
-    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 5;
+int main(int argc, char *argv[]) {
+    if (argc != 2)
+    {
+        printf("Usage: serial <n_hidden_layers> \n");
+        exit(-1);
+    }
+
+    int n_hidden = atoi(argv[1]);
+
+
+    int n_in = 784, n_out = 10, n_epochs = 5;
     float lr = (128.0 / n_hidden) * 0.001;
     int data_size;
 
@@ -330,6 +339,7 @@ int main() {
 
     cout << "Data size: " << data_size << endl;
     cout << "Hidden layer size: "<< n_hidden << endl;
+    cout << "Batch size: "<< BATCH_SIZE << endl;
 
     int train_test_split = (int)(0.9 * data_size);
 
@@ -371,8 +381,8 @@ int main() {
     cudaMallocManaged(&l1_out, n_hidden * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&l2_out, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&relu_out, n_hidden * BATCH_SIZE*sizeof(float));
-    cudaMallocManaged(&input, n_in * BATCH_SIZE*sizeof(float));
-    cudaMallocManaged(&target, n_out * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&input, n_in * data_size*sizeof(float));
+    cudaMallocManaged(&target, n_out * data_size*sizeof(float));
 
     cudaMallocManaged(&output, n_out * BATCH_SIZE*sizeof(float));
 
@@ -381,8 +391,8 @@ int main() {
     cudaMallocManaged(&l2_error, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&relu_error, n_hidden * BATCH_SIZE*sizeof(float));
 
-    // set_eq(input, &x_train[0], n_in * data_size);
-    // set_eq(target, &y_train[0], n_out * data_size); 
+    set_eq(input, &x_train[0], n_in * data_size);
+    set_eq(target, &y_train[0], n_out * data_size); 
 
     float forward_time = 0, backprop_time = 0;
     chrono::steady_clock::time_point begin, end;
@@ -394,15 +404,17 @@ int main() {
     for (int i = 0; i < n_epochs; i++) {
         cout << "Epoch " << i << "\n";
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
+            float *curr_in = &input[batch * BATCH_SIZE * n_in];
+            float *curr_target = &target[batch * BATCH_SIZE * n_out];
 
-            set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
-            set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
+            // set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
+            // set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
             cudaMemset(relu_error, 0, n_hidden * BATCH_SIZE*sizeof(float));
 
             // FORWARD PROPAGATION STEP
             b = chrono::steady_clock::now();
             
-            linear_forward_gpu<<<l1_grid, Block>>>(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
+            linear_forward_gpu<<<l1_grid, Block>>>(curr_in, l1_out, l1_weights, l1_bias, n_in, n_hidden);
             relu_forward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_out, n_hidden);
             linear_forward_gpu<<<l2_grid, Block>>>(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
             softmax_forward_gpu<<<l2_grid, Block>>>(l2_out, output, n_out);
@@ -417,12 +429,12 @@ int main() {
 
             b = chrono::steady_clock::now();
 
-            softmax_CE_backprop_gpu<<<l2_grid,Block>>>(target, output, l2_error, n_out);
+            softmax_CE_backprop_gpu<<<l2_grid,Block>>>(curr_target, output, l2_error, n_out);
             linear_backprop_gpu<<<l2_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
             relu_backward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_error, l1_error, n_hidden);
 
             linear_update_gpu<<<l2_grid, Block>>>(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
-            linear_update_gpu<<<l1_grid, Block>>>(input, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
+            linear_update_gpu<<<l1_grid, Block>>>(curr_in, l1_error, l1_weights, l1_bias, n_in, n_hidden, lr);
 
 
             e = chrono::steady_clock::now();
