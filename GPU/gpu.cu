@@ -93,6 +93,13 @@ void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_o
     }
 }
 
+__global__ void softmax_CE_backprop_gpu(float *truth, float *predict, float *error, int n_out){
+    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
+    if((row < BATCH_SIZE) && (col < n_out)){
+        error[row * n_out + col] = predict[row * n_out + col] - truth[row * n_out + col]; 
+    }
+}
+
 void softmax_forward_cpu(float *in, float *out, int n_out) {
     float sum_exp;
     for (int sample = 0; sample < BATCH_SIZE; sample++) {
@@ -376,8 +383,10 @@ int main() {
     cudaMallocManaged(&relu_out, n_hidden * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&input, n_in * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&output, n_out * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&target, n_out * BATCH_SIZE*sizeof(float));
 
     cudaMallocManaged(&l1_error, n_hidden * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&target, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&l2_error, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&relu_error, n_hidden * BATCH_SIZE*sizeof(float));
 
@@ -392,8 +401,8 @@ int main() {
     for (int i = 0; i < n_epochs; i++) {
         cout << "Epoch " << i << "\n";
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
-            target = &y_train[batch * BATCH_SIZE * n_out];
             set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
+            set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
 
             // FORWARD PROPAGATION STEP
             b = chrono::steady_clock::now();
@@ -415,9 +424,7 @@ int main() {
 
             b = chrono::steady_clock::now();
 
-            init_zero(l2_error, BATCH_SIZE * n_out);
-            softmax_CE_backprop_cpu(target, output, l2_error, n_out);
-
+            softmax_CE_backprop_gpu<<<l2_grid,Block>>>(target, output, l2_error, n_out);
             init_zero(relu_error, BATCH_SIZE * n_hidden);
             linear_backprop_gpu<<<l2_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
             relu_backward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_error, l1_error, n_hidden);
