@@ -155,8 +155,8 @@ float accuracy(float *output, float *target, int n_out) {
 }
 
 int main() {
-    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 5;
-    float lr = (128.0/n_hidden)*0.001;
+    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 1;
+    float lr = (128.0 / n_hidden) * 0.001;
     int data_size;
 
     vector<float> x_train;
@@ -168,16 +168,13 @@ int main() {
     int train_test_split = (int)(0.9 * data_size);
 
     float *l1_weights = new float[n_in * n_hidden];
-    float *l1_bias = new float[n_hidden];
+    float *l1_bias = new float[n_hidden]();
 
     float *l2_weights = new float[n_hidden * n_out];
-    float *l2_bias = new float[n_out];
+    float *l2_bias = new float[n_out]();
 
     kaiming_init(l1_weights, n_in, n_hidden);
-    init_zero(l1_bias, n_hidden);
-
     kaiming_init(l2_weights, n_hidden, n_out);
-    init_zero(l2_bias, n_out);
 
     float error;
     float *input, *target, *output;
@@ -196,26 +193,26 @@ int main() {
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
             input = &x_train[batch * BATCH_SIZE * n_in];
             target = &y_train[batch * BATCH_SIZE * n_out];
-            
+
             // FORWARD PROPAGATION STEP
 
             b = chrono::steady_clock::now();
 
-            l1_out = new float[n_hidden * BATCH_SIZE];
+            l1_out = new float[n_hidden * BATCH_SIZE]();
             linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
 
-            relu_out = new float[n_hidden * BATCH_SIZE];
+            relu_out = new float[n_hidden * BATCH_SIZE]();
             relu_forward_cpu(l1_out, relu_out, n_hidden);
 
-            l2_out = new float[BATCH_SIZE * n_out];
+            l2_out = new float[BATCH_SIZE * n_out]();
             linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
 
-            output = new float[BATCH_SIZE * n_out];
+            output = new float[BATCH_SIZE * n_out]();
             softmax_forward_cpu(l2_out, output, n_out);
 
             error = 0;
             CE_forward_cpu(target, output, &error, n_out);
-
+            
             e = chrono::steady_clock::now();
             forward_time += (chrono::duration_cast<chrono::microseconds>(e - b).count());
 
@@ -224,13 +221,13 @@ int main() {
 
             b = chrono::steady_clock::now();
 
-            l2_error = new float[BATCH_SIZE * n_out];
+            l2_error = new float[BATCH_SIZE * n_out]();
             softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
-            relu_error = new float[n_hidden * BATCH_SIZE];
+            relu_error = new float[n_hidden * BATCH_SIZE]();
             linear_backprop_cpu(l2_error, relu_error, l2_weights, n_hidden, n_out);
 
-            l1_error = new float[n_hidden * BATCH_SIZE];
+            l1_error = new float[n_hidden * BATCH_SIZE]();
             relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
 
             linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
@@ -249,9 +246,7 @@ int main() {
     cout << "Forward propagation time: " << forward_time / 1000000.0f << "s" << endl;
     cout << "Backpropagation time: " << backprop_time / 1000000.0f << "s" << endl;
 
-
     cout << "===TESTING===" << endl;
-
 
     int last_test_batch = data_size / BATCH_SIZE;
     int first_test_batch = train_test_split / BATCH_SIZE;
@@ -262,16 +257,16 @@ int main() {
         input = &x_train[batch * BATCH_SIZE * n_in];
         target = &y_train[batch * BATCH_SIZE * n_out];
 
-        l1_out = new float[n_hidden * BATCH_SIZE];
+        l1_out = new float[n_hidden * BATCH_SIZE]();
         linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
 
-        relu_out = new float[n_hidden * BATCH_SIZE];
+        relu_out = new float[n_hidden * BATCH_SIZE]();
         relu_forward_cpu(l1_out, relu_out, n_hidden);
 
-        l2_out = new float[BATCH_SIZE * n_out];
+        l2_out = new float[BATCH_SIZE * n_out]();
         linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
 
-        output = new float[BATCH_SIZE * n_out];
+        output = new float[BATCH_SIZE * n_out]();
         softmax_forward_cpu(l2_out, output, n_out);
 
         error = 0;
