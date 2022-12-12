@@ -22,10 +22,10 @@ GENCODE = $(GENCODE_SM37)
 BINARIES = gpu
 
 gpu: gpu.o
-	$(NVCC) $(GENCODE) $(LFLAGS) -o $@ $<
+	$(NVCC) $(GENCODE) $(LFLAGS) -o $@ $(CFLAGS) $<
 
 .cu.o:
-	$(NVCC) $(GENCODE) $(NVCCFLAGS) -o $@ -c $<
+	$(NVCC) $(GENCODE) $(NVCCFLAGS) -o $@ $(CFLAGS) -c $<
 
 clean:	
 	rm -f *.o $(BINARIES)

@@ -10,9 +10,9 @@ using namespace std;
 #define BATCH_SIZE 32
 #define BLOCK_SIZE 32
 
-float max(float t1, float t2) {
-    return t1 < t2 ? t2 : t1;
-}
+// float max(float t1, float t2) {
+//     return t1 < t2 ? t2 : t1;
+// }
 
 void CE_forward_cpu(float *truth, float *predict, float *error, int n_out) {
     for (int i = 0; i < n_out * BATCH_SIZE; i++) {
@@ -202,10 +202,10 @@ int main() {
     cudaMallocManaged(&l2_bias, n_out*sizeof(float));
 
 
-    n_block_rows = (BATCH_SIZE-1) / block_size + 1;
-    l1_block_cols = (n_hidden - 1) / block_size +1;
+    int n_block_rows = (BATCH_SIZE-1) / BLOCK_SIZE + 1;
+    int l1_block_cols = (n_hidden - 1) / BLOCK_SIZE +1;
 
-    l2_block_cols = (n_out - 1) / block_size +1;
+    int l2_block_cols = (n_out - 1) / BLOCK_SIZE +1;
 
     dim3 l1_grid(n_block_rows, l1_block_cols);
     dim3 l2_grid(n_block_rows, l2_block_cols);
