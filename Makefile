@@ -7,9 +7,9 @@
 
 NVCC = nvcc
 
-NVCCFLAGS = -O3 -Wno-deprecated-gpu-targets -g
+NVCCFLAGS = -O3 -Wno-deprecated-gpu-targets -g -std=c++11
 
-LFLAGS = -lm -Wno-deprecated-gpu-targets -g
+LFLAGS = -lm -Wno-deprecated-gpu-targets -g -std=c++11
 
 # Compiler-specific flags (by default, we always use sm_37)
 GENCODE_SM37 = -gencode=arch=compute_37,code=\"sm_37,compute_37\"
@@ -17,12 +17,9 @@ GENCODE = $(GENCODE_SM37)
 
 .SUFFIXES : .cu .ptx
 
-BINARIES = rectmatmul matmul
+BINARIES = gpu
 
-rectmatmul: rectmatmul.o
-	$(NVCC) $(GENCODE) $(LFLAGS) -o $@ $<
-
-matmul: matmul.o
+gpu: gpu.o
 	$(NVCC) $(GENCODE) $(LFLAGS) -o $@ $<
 
 .cu.o:
@@ -30,3 +27,18 @@ matmul: matmul.o
 
 clean:	
 	rm -f *.o $(BINARIES)
+
+
+
+# CC = g++
+
+# CFLAGS = -std=c++11
+ 
+# serial: serial.o load_mnist.o
+# 	$(CC) -o $@ $(CFLAGS) $^
+
+# %.o: %.cpp
+# 	$(CC) $(CFLAGS) -c $<
+
+# clean:
+# 	rm -f serial *.o

@@ -8,6 +8,7 @@
 using namespace std;
 
 #define BATCH_SIZE 32
+#define BLOCK_SIZE 32
 
 float max(float t1, float t2) {
     return t1 < t2 ? t2 : t1;
@@ -171,8 +172,14 @@ float accuracy(float *output, float *target, int n_out) {
     return acc / BATCH_SIZE;
 }
 
+void set_eq(float *a, float *b, int n){
+    for (int i=0; i<n; i++){
+        a[i] = b[i];
+    }
+}
+
 int main() {
-    int n_in = 784, n_hidden = 32, n_out = 10, n_epochs = 5;
+    int n_in = 784, n_hidden = 256, n_out = 10, n_epochs = 5;
     float lr = (128.0 / n_hidden) * 0.001;
     int data_size;
 
@@ -184,11 +191,33 @@ int main() {
 
     int train_test_split = (int)(0.9 * data_size);
 
-    float *l1_weights = new float[n_in * n_hidden];
-    float *l1_bias = new float[n_hidden];
 
-    float *l2_weights = new float[n_hidden * n_out];
-    float *l2_bias = new float[n_out];
+
+    float *l1_weights, *l1_bias, *l2_weights , *l2_bias;
+
+
+    cudaMallocManaged(&l1_weights, n_in * n_hidden*sizeof(float));
+    cudaMallocManaged(&l1_bias, n_hidden*sizeof(float));
+
+    cudaMallocManaged(&l2_weights, n_out * n_hidden*sizeof(float));
+    cudaMallocManaged(&l2_bias, n_out*sizeof(float));
+
+
+    n_block_rows = (BATCH_SIZE-1) / block_size + 1;
+    l1_block_cols = (n_hidden - 1) / block_size +1;
+
+    l2_block_cols = (n_out - 1) / block_size +1;
+
+    dim3 l1_grid(n_block_rows, l1_block_cols);
+    dim3 l2_grid(n_block_rows, l2_block_cols);
+
+    dim3 Block(BLOCK_SIZE, BLOCK_SIZE);
+
+    // float *l1_weights = new float[n_in * n_hidden];
+    // float *l1_bias = new float[n_hidden];
+
+    // float *l2_weights = new float[n_hidden * n_out];
+    // float *l2_bias = new float[n_out];
 
     kaiming_init(l1_weights, n_in, n_hidden);
     init_zero(l1_bias, n_hidden);
@@ -201,6 +230,13 @@ int main() {
     float *l1_out, *relu_out, *l2_out;
     float *l2_error, *l1_error, *relu_error;
 
+
+    cudaMallocManaged(&l1_out, n_hidden * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&l2_out, n_out * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&relu_out, n_hidden * BATCH_SIZE*sizeof(float));
+    cudaMallocManaged(&input, n_in * BATCH_SIZE*sizeof(float));
+
+
     float forward_time = 0, backprop_time = 0;
     chrono::steady_clock::time_point begin, end;
     chrono::steady_clock::time_point b, e;
@@ -211,21 +247,28 @@ int main() {
     for (int i = 0; i < n_epochs; i++) {
         cout << "Epoch " << i << "\n";
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
-            input = &x_train[batch * BATCH_SIZE * n_in];
+            set_eq(input, &x_train[batch * BATCH_SIZE * n_in], BATCH_SIZE);
+            // input = &x_train[batch * BATCH_SIZE * n_in];
             target = &y_train[batch * BATCH_SIZE * n_out];
 
             // FORWARD PROPAGATION STEP
 
             b = chrono::steady_clock::now();
 
-            l1_out = new float[n_hidden * BATCH_SIZE];
-            linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
+            // l1_out = new float[n_hidden * BATCH_SIZE];
+            // linear_forward_cpu(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
+            linear_forward_gpu<<<l1_grid, Block>>>(input, l1_out, l1_weights, l1_bias, n_in, n_hidden);
+            cudaDeviceSynchronize();
 
-            relu_out = new float[n_hidden * BATCH_SIZE];
+
+            // relu_out = new float[n_hidden * BATCH_SIZE];
             relu_forward_cpu(l1_out, relu_out, n_hidden);
 
-            l2_out = new float[BATCH_SIZE * n_out];
-            linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
+            // l2_out = new float[BATCH_SIZE * n_out];
+            // linear_forward_cpu(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
+            linear_forward_gpu<<<l2_grid, Block>>>(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
+            cudaDeviceSynchronize();
+
 
             output = new float[BATCH_SIZE * n_out];
             softmax_forward_cpu(l2_out, output, n_out);
@@ -240,13 +283,13 @@ int main() {
 
             b = chrono::steady_clock::now();
 
-            l2_error = new float[BATCH_SIZE * n_out];
+            l2_error = new float[BATCH_SIZE * n_out]();
             softmax_CE_backprop_cpu(target, output, l2_error, n_out);
 
-            relu_error = new float[n_hidden * BATCH_SIZE];
+            relu_error = new float[n_hidden * BATCH_SIZE]();
             linear_backprop_cpu(l2_error, relu_error, l2_weights, n_hidden, n_out);
 
-            l1_error = new float[n_hidden * BATCH_SIZE];
+            l1_error = new float[n_hidden * BATCH_SIZE]();
             relu_backprop_cpu(l1_out, relu_error, l1_error, n_hidden);
 
             linear_update_cpu(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
