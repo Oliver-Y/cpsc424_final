@@ -1,0 +1,81 @@
+***Building CPU
+rm -f serial *.o
+g++ -std=c++11 -c serial.cpp
+g++ -std=c++11 -c load_mnist.cpp
+g++ -o serial -std=c++11 serial.o load_mnist.o
+***Running
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 32
+Batch size: 32
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 53.9847s
+Forward propagation time: 25.6632s
+Backpropagation time: 28.2924s
+===TESTING===
+TEST avg error: 0.25938
+TEST avg accuracy: 0.925095
+
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 64
+Batch size: 32
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 101.836s
+Forward propagation time: 48.2135s
+Backpropagation time: 53.5886s
+===TESTING===
+TEST avg error: 0.292277
+TEST avg accuracy: 0.915792
+
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 128
+Batch size: 32
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 288.985s
+Forward propagation time: 138.965s
+Backpropagation time: 149.99s
+===TESTING===
+TEST avg error: 0.33159
+TEST avg accuracy: 0.90458
+
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 256
+Batch size: 32
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 633.741s
+Forward propagation time: 301.594s
+Backpropagation time: 332.128s
+===TESTING===
+TEST avg error: 0.399228
+TEST avg accuracy: 0.884303

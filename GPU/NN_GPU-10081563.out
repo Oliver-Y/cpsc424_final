@@ -1,0 +1,104 @@
+***Purging module files
+
+The following modules were not unloaded:
+  (Use "module --force purge" to unload all):
+
+  1) StdEnv
+
+***Loading CUDA module file
+
+
+
+Currently Loaded Modules:
+  1) StdEnv (S)   2) CUDA/11.3.1 (g)
+
+  Where:
+   S:  Module is Sticky, requires --force to unload or purge
+   g:  built for GPU
+
+ 
+
+***Building gpu
+rm -f *.o gpu
+nvcc -gencode=arch=compute_37,code=\"sm_37,compute_37\" -O3 -Wno-deprecated-gpu-targets -g -std=c++11 -o gpu.o -std=c++11 -c gpu.cu
+nvcc -gencode=arch=compute_37,code=\"sm_37,compute_37\" -lm -Wno-deprecated-gpu-targets -g -std=c++11 -o gpu -std=c++11 gpu.o
+***Running
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 32
+Batch size: 64
+row: 2 l1 cols: 1 l2 cols: 1
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 25.0537s
+Forward propagation time: 9.61718s
+Backpropagation time: 15.3027s
+===TESTING===
+TEST avg error: 0.307107
+TEST avg accuracy: 0.909328
+
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 64
+Batch size: 64
+row: 2 l1 cols: 2 l2 cols: 1
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 25.7387s
+Forward propagation time: 9.8297s
+Backpropagation time: 15.7746s
+===TESTING===
+TEST avg error: 0.347902
+TEST avg accuracy: 0.901515
+
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 128
+Batch size: 64
+row: 2 l1 cols: 4 l2 cols: 1
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 26.7724s
+Forward propagation time: 10.125s
+Backpropagation time: 16.5145s
+===TESTING===
+TEST avg error: 0.421429
+TEST avg accuracy: 0.884233
+
+
+Loading data ...
+Data size: 42000
+Hidden layer size: 256
+Batch size: 64
+row: 2 l1 cols: 8 l2 cols: 1
+===TRAINING===
+Epoch 0
+Epoch 1
+Epoch 2
+Epoch 3
+Epoch 4
+===TRAINING COMPLETE===
+Training time: 52.6216s
+Forward propagation time: 19.9102s
+Backpropagation time: 32.5612s
+===TESTING===
+TEST avg error: 0.503713
+TEST avg accuracy: 0.858191
