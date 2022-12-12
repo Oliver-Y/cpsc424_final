@@ -1,12 +1,12 @@
 
 CC = g++
 
-CFLAGS = -g -std=c++11 
+CFLAGS = -std=c++11
  
 serial: serial.o load_mnist.o
 	$(CC) -o $@ $(CFLAGS) $^
 
-.c.o:
+%.o: %.cpp
 	$(CC) $(CFLAGS) -c $<
 
 clean:
