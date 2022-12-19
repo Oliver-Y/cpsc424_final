@@ -76,6 +76,85 @@ void load_mnist(vector<float> &x_train, vector<float> &y_train, int *data_size) 
     *data_size = y_train.size() / 10;
 }
 
+__device__ int get_subMatIdx(int stride, int blockRow, int blockCol, int row, int col){
+    return stride * (BLOCK_SIZE * blockRow + row) + BLOCK_SIZE * blockCol + col; 
+}
+
+__device__ void gpu_matrixmult(float *a, float* b, float* c, float *bias, int n, int p, int m){
+    int blockRow = blockIdx.y, blockCol = blockIdx.x, row = threadIdx.y, col = threadIdx.x; 
+    float Cvalue = 0; 
+    for(int i = 0; i < ((p-1) / BLOCK_SIZE + 1); ++i){
+        __shared__ float As[BLOCK_SIZE][BLOCK_SIZE]; 
+        __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE]; 
+        if(row + BLOCK_SIZE * blockRow < n && col + i*BLOCK_SIZE < p){
+            int Asubidx = get_subMatIdx(p,blockRow,i, row, col); 
+            As[row][col] = a[Asubidx]; 
+        }
+        else{
+            As[row][col] = 0; 
+        }
+        if(row + i*BLOCK_SIZE < p && col + BLOCK_SIZE * blockCol < m){
+            int Bsubidx = get_subMatIdx(m,i,blockCol,row,col); 
+            Bs[row][col] = b[Bsubidx]; 
+        }
+        else{
+            Bs[row][col] = 0; 
+        }
+        __syncthreads(); 
+        if(col + BLOCK_SIZE * blockCol < m && row + BLOCK_SIZE * blockRow < n){
+            for(int e = 0; e < BLOCK_SIZE; ++e){
+                Cvalue += As[row][e] * Bs[e][col];
+            }
+            __syncthreads(); 
+        }
+    }
+
+    if(col + BLOCK_SIZE * blockCol < m && row + BLOCK_SIZE * blockRow < n){
+        int CsubIdx = get_subMatIdx(m,blockRow,blockCol,row,col); 
+        c[CsubIdx]= Cvalue + bias[col + blockCol * blockDim.x];
+    }
+}
+
+
+//Multiply A and B transpose
+__device__ void gpu_matrixmult_transpose(float *a, float* b, float* c, int n, int p, int m){
+    int blockRow = blockIdx.y, blockCol = blockIdx.x, row = threadIdx.y, col = threadIdx.x; 
+    float Cvalue = 0; 
+    for(int i = 0; i < ((p-1) / BLOCK_SIZE + 1); ++i){
+        __shared__ float As[BLOCK_SIZE][BLOCK_SIZE]; 
+        __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE]; 
+        if(row + BLOCK_SIZE * blockRow < n && col + i*BLOCK_SIZE < p){
+            int Asubidx = get_subMatIdx(p,blockRow,i, row, col); 
+            As[row][col] = a[Asubidx]; 
+        }
+        else{
+            As[row][col] = 0; 
+        }
+        //Flipped for the tranpose of B
+        if(row + i*BLOCK_SIZE < m && col + BLOCK_SIZE * blockCol < p){
+            int Bsubidx = get_subMatIdx(m,blockCol,i,row,col);
+            Bs[row][col] = b[Bsubidx]; 
+        }
+        else{
+            Bs[row][col] = 0; 
+        }
+        __syncthreads(); 
+        if(col + BLOCK_SIZE * blockCol < m && row + BLOCK_SIZE * blockRow < n){
+            for(int e = 0; e < BLOCK_SIZE; ++e){
+                Cvalue += As[row][e] * Bs[col][e];
+            }
+            __syncthreads(); 
+        }
+    }
+
+    if(col + BLOCK_SIZE * blockCol < m && row + BLOCK_SIZE * blockRow < n){
+        int CsubIdx = get_subMatIdx(m,blockRow,blockCol,row,col); 
+        c[CsubIdx]= Cvalue;
+    }
+}
+
+
+
 void CE_forward_cpu(float *truth, float *predict, float *error, int n_out) {
     for (int i = 0; i < n_out * BATCH_SIZE; i++) {
         *error += -truth[i] * log(max(predict[i], 0.0001)) / BATCH_SIZE;
@@ -89,7 +168,9 @@ void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_o
 }
 
 __global__ void softmax_CE_backprop_gpu(float *truth, float *predict, float *error, int n_out){
-    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
+    //int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
+    int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
+
     if((row < BATCH_SIZE) && (col < n_out)){
         error[row * n_out + col] = predict[row * n_out + col] - truth[row * n_out + col]; 
     }
@@ -116,7 +197,8 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
 }
 
 __global__ void softmax_forward_gpu(float *in, float* out, int n_out){
-    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
+    //int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
+    int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
     float sum_exp = 0.0; 
     float max_ = -10000; 
     if((row < BATCH_SIZE) && (col < n_out)){
@@ -137,38 +219,30 @@ __global__ void softmax_forward_gpu(float *in, float* out, int n_out){
 
 
 __global__ void linear_forward_gpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
-    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
-    int in_index, weights_index, out_index;
-
-    if ((row < BATCH_SIZE) && (col < n_out)) {
-        out_index = row * n_out + col;
-        out[out_index] = bias[col];
-
-        for (int i = 0; i < n_in; i++) {
-            in_index = row * n_in + i;
-            weights_index = i * n_out + col;
-            out[out_index] += in[in_index] * weights[weights_index];
-        }
-    }
+    gpu_matrixmult(in, weights, out,bias, BATCH_SIZE, n_in, n_out);
 }
 
+// Error at prev layer = matmul of weights with error at curr layer
+// errors = (n_out * BATCH_SIZE), out_errors = (n_in * BATCH_SIZE), weights = (n_in * n_out)
 __global__ void linear_backprop_gpu(float *errors, float *out_errors, float *weights, int n_in, int n_out) {
-    int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
+//    gpu_matrixmult_transpose(errors, weights, out_errors, BATCH_SIZE, n_out, n_in); 
+    int col = blockDim.x*blockIdx.x + threadIdx.x, row = blockDim.y*blockIdx.y + threadIdx.y;
     int errors_index, out_errors_index, weights_index;
-
-    if ((row < BATCH_SIZE) && (col < n_out)){
-        errors_index = row*n_out + col;
-        for (int i=0; i<n_in; i++){
-            out_errors_index = row*n_in + i;
-            weights_index = i*n_out + col;
-            atomicAdd(&out_errors[out_errors_index], weights[weights_index]*errors[errors_index]);
-        }
-    }
+    float output = 0; 
+    if((row < BATCH_SIZE) && (col < n_in)){
+       out_errors_index = row * n_in + col;
+       for(int i = 0; i < n_out; ++i){
+           weights_index = col * n_out + i; 
+           errors_index = row * n_out + i; 
+           output += weights[weights_index] * errors[errors_index]; 
+       }
+       atomicAdd(&out_errors[out_errors_index], output); 
+    } 
 }
 
 
 __global__ void linear_update_gpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, float lr) {
-    int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
+    int col = blockDim.x*blockIdx.x + threadIdx.x, row = blockDim.y*blockIdx.y + threadIdx.y;
     int in_index, errors_index, weights_index;
 
     if ((row < BATCH_SIZE) && (col < n_out)){
@@ -357,10 +431,13 @@ int main(int argc, char *argv[]) {
     int n_block_rows = (BATCH_SIZE-1) / BLOCK_SIZE + 1;
     int l1_block_cols = (n_hidden - 1) / BLOCK_SIZE +1;
     int l2_block_cols = (n_out - 1) / BLOCK_SIZE +1;
+    //L1 out --> relu out --> n-hidden --> ni_hidden 
     int relu_blocks = (n_hidden * BATCH_SIZE - 1) / BLOCK_SIZE+1;
 
-    dim3 l1_grid(n_block_rows, l1_block_cols);
-    dim3 l2_grid(n_block_rows, l2_block_cols);
+    //dim3 l1_grid(n_block_rows, l1_block_cols);
+    //dim3 l2_grid(n_block_rows, l2_block_cols);
+    dim3 l1_grid(l1_block_cols, n_block_rows); 
+    dim3 l2_grid(l2_block_cols, n_block_rows); 
 
     dim3 Block(BLOCK_SIZE, BLOCK_SIZE);
 
@@ -414,8 +491,10 @@ int main(int argc, char *argv[]) {
             // FORWARD PROPAGATION STEP
             b = chrono::steady_clock::now();
             
+           // gpu_matrixmult<<<l1_grid, Block>>>(curr_in, l1_weights, l1_out, l1_bias, BATCH_SIZE, n_in, n_hidden); 
             linear_forward_gpu<<<l1_grid, Block>>>(curr_in, l1_out, l1_weights, l1_bias, n_in, n_hidden);
             relu_forward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_out, n_hidden);
+           // gpu_matrixmult<<<l2_grid, Block>>>(relu_out, l2_weights, l2_out, l2_bias, BATCH_SIZE, n_hidden, n_out);
             linear_forward_gpu<<<l2_grid, Block>>>(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
             softmax_forward_gpu<<<l2_grid, Block>>>(l2_out, output, n_out);
 
@@ -431,7 +510,7 @@ int main(int argc, char *argv[]) {
             b = chrono::steady_clock::now();
 
             softmax_CE_backprop_gpu<<<l2_grid,Block>>>(curr_target, output, l2_error, n_out);
-            linear_backprop_gpu<<<l2_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
+            linear_backprop_gpu<<<l1_grid, Block>>>(l2_error, relu_error, l2_weights, n_hidden, n_out);
             relu_backward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_error, l1_error, n_hidden);
 
             linear_update_gpu<<<l2_grid, Block>>>(relu_out, l2_error, l2_weights, l2_bias, n_hidden, n_out, lr);
@@ -446,7 +525,7 @@ int main(int argc, char *argv[]) {
         }
         // cout << "error: " << error << endl;
     }
-
+    cudaDeviceSynchronize();
     cout << "===TRAINING COMPLETE===" << endl;
     end = chrono::steady_clock::now();
     cout << "Training time: " << (chrono::duration_cast<chrono::microseconds>(end - begin).count()) / 1000000.0f << "s" << endl;

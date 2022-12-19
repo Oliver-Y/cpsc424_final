@@ -12,6 +12,7 @@
 #SBATCH --gres-flags=enforce-binding
 #SBATCH --gpus=1
 
+
 echo "***Purging module files"
 echo ""
 module purge
@@ -22,26 +23,28 @@ module load CUDA
 echo ""
 module list
 
-# echo ""
-# echo "***Running nvidia-smi"
-# echo ""
-# nvidia-smi
-# echo ""
-# echo ""
-
-# echo "***Running deviceQuery"
-# /vast/palmer/apps/avx.grace/software/CUDAcore/11.3.1/extras/demo_suite/deviceQuery
-# echo ""
-
-echo "***Building gpu"
+echo "***Building GPU"
 make clean
 make gpu
 
 echo "***Running"
 
+echo "===== HIDDEN LAYER 32 ======="
+echo ""
+./gpu 32
+echo ""
 
 echo ""
 ./gpu 32
+echo ""
+
+echo ""
+./gpu 32
+echo ""
+
+echo "===== HIDDEN LAYER 64 ======="
+echo ""
+./gpu 64
 echo ""
 
 echo ""
@@ -49,12 +52,36 @@ echo ""
 echo ""
 
 echo ""
+./gpu 64
+echo ""
+
+echo "===== HIDDEN LAYER 128 ======="
+
+echo ""
 ./gpu 128
 echo ""
 
 echo ""
-./gpu 256
+./gpu 128
+echo ""
 
+echo ""
+./gpu 128
+echo ""
+
+
+echo "===== HIDDEN LAYER 256 ======="
+echo ""
+./gpu 256
+echo ""
+
+echo ""
+./gpu 256
+echo ""
+
+echo ""
+./gpu 256
+echo ""
 
 
 
