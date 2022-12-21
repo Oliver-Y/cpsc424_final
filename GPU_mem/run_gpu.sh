@@ -34,36 +34,14 @@ echo ""
 ./gpu 32
 echo ""
 
-echo ""
-./gpu 32
-echo ""
-
-echo ""
-./gpu 32
-echo ""
 
 echo "===== HIDDEN LAYER 64 ======="
 echo ""
 ./gpu 64
 echo ""
 
-echo ""
-./gpu 64
-echo ""
-
-echo ""
-./gpu 64
-echo ""
 
 echo "===== HIDDEN LAYER 128 ======="
-
-echo ""
-./gpu 128
-echo ""
-
-echo ""
-./gpu 128
-echo ""
 
 echo ""
 ./gpu 128
@@ -75,13 +53,6 @@ echo ""
 ./gpu 256
 echo ""
 
-echo ""
-./gpu 256
-echo ""
-
-echo ""
-./gpu 256
-echo ""
 
 
 

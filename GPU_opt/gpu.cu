@@ -11,7 +11,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 32
+#define BATCH_SIZE 128
 #define BLOCK_SIZE 32
 
 vector<string> split(const string &s, char delim) {
@@ -168,7 +168,6 @@ void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_o
 }
 
 __global__ void softmax_CE_backprop_gpu(float *truth, float *predict, float *error, int n_out){
-    //int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
 
     if((row < BATCH_SIZE) && (col < n_out)){
@@ -197,7 +196,6 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
 }
 
 __global__ void softmax_forward_gpu(float *in, float* out, int n_out){
-    //int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
     float sum_exp = 0.0; 
     float max_ = -10000; 
@@ -484,17 +482,13 @@ int main(int argc, char *argv[]) {
             float *curr_in = &input[batch * BATCH_SIZE * n_in];
             float *curr_target = &target[batch * BATCH_SIZE * n_out];
 
-            // set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
-            // set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
             cudaMemset(relu_error, 0, n_hidden * BATCH_SIZE*sizeof(float));
 
             // FORWARD PROPAGATION STEP
             b = chrono::steady_clock::now();
             
-           // gpu_matrixmult<<<l1_grid, Block>>>(curr_in, l1_weights, l1_out, l1_bias, BATCH_SIZE, n_in, n_hidden); 
             linear_forward_gpu<<<l1_grid, Block>>>(curr_in, l1_out, l1_weights, l1_bias, n_in, n_hidden);
             relu_forward_gpu<<<relu_blocks, BLOCK_SIZE>>>(l1_out, relu_out, n_hidden);
-           // gpu_matrixmult<<<l2_grid, Block>>>(relu_out, l2_weights, l2_out, l2_bias, BATCH_SIZE, n_hidden, n_out);
             linear_forward_gpu<<<l2_grid, Block>>>(relu_out, l2_out, l2_weights, l2_bias, n_hidden, n_out);
             softmax_forward_gpu<<<l2_grid, Block>>>(l2_out, output, n_out);
 

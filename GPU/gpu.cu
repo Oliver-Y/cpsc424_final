@@ -11,7 +11,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 32
+#define BATCH_SIZE 128
 #define BLOCK_SIZE 32
 
 vector<string> split(const string &s, char delim) {
@@ -89,9 +89,7 @@ void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_o
 }
 
 __global__ void softmax_CE_backprop_gpu(float *truth, float *predict, float *error, int n_out){
-   // int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
-    //int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
     if((row < BATCH_SIZE) && (col < n_out)){
         error[row * n_out + col] = predict[row * n_out + col] - truth[row * n_out + col]; 
     }
@@ -118,7 +116,6 @@ void softmax_forward_cpu(float *in, float *out, int n_out) {
 }
 
 __global__ void softmax_forward_gpu(float *in, float* out, int n_out){
-    //int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
 
     float sum_exp = 0.0; 
@@ -141,7 +138,6 @@ __global__ void softmax_forward_gpu(float *in, float* out, int n_out){
 
 
 __global__ void linear_forward_gpu(float *in, float *out, float *weights, float *bias, int n_in, int n_out) {
-//    int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
     int in_index, weights_index, out_index;
 
@@ -174,7 +170,6 @@ __global__ void linear_backprop_gpu(float *errors, float *out_errors, float *wei
 
 
 __global__ void linear_update_gpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, float lr) {
-    //int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
     int col = blockDim.x*blockIdx.x + threadIdx.x, row = blockDim.y*blockIdx.y + threadIdx.y;
     int in_index, errors_index, weights_index;
 
@@ -366,8 +361,7 @@ int main(int argc, char *argv[]) {
     int l2_block_cols = (n_out - 1) / BLOCK_SIZE +1;
     int relu_blocks = (n_hidden * BATCH_SIZE - 1) / BLOCK_SIZE+1;
 
-    //dim3 l1_grid(n_block_rows, l1_block_cols);
-    //dim3 l2_grid(n_block_rows, l2_block_cols);
+   
     dim3 l1_grid(l1_block_cols,n_block_rows); 
     dim3 l2_grid(l2_block_cols, n_block_rows); 
 
@@ -416,8 +410,6 @@ int main(int argc, char *argv[]) {
             float *curr_in = &input[batch * BATCH_SIZE * n_in];
             float *curr_target = &target[batch * BATCH_SIZE * n_out];
 
-            // set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
-            // set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
             cudaMemset(relu_error, 0, n_hidden * BATCH_SIZE*sizeof(float));
 
             // FORWARD PROPAGATION STEP
@@ -456,6 +448,7 @@ int main(int argc, char *argv[]) {
         // cout << "error: " << error << endl;
     }
     cudaDeviceSynchronize();
+    
     cout << "===TRAINING COMPLETE===" << endl;
     end = chrono::steady_clock::now();
     cout << "Training time: " << (chrono::duration_cast<chrono::microseconds>(end - begin).count()) / 1000000.0f << "s" << endl;

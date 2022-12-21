@@ -6,7 +6,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 32
+#define BATCH_SIZE 64
 
 float max(float t1, float t2) {
     return t1 < t2 ? t2 : t1;

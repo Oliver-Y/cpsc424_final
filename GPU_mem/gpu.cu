@@ -11,7 +11,7 @@
 
 using namespace std;
 
-#define BATCH_SIZE 32
+#define BATCH_SIZE 128
 #define BLOCK_SIZE 32
 
 vector<string> split(const string &s, char delim) {
@@ -89,7 +89,6 @@ void softmax_CE_backprop_cpu(float *truth, float *predict, float *error, int n_o
 }
 
 __global__ void softmax_CE_backprop_gpu(float *truth, float *predict, float *error, int n_out){
-    //int row = blockDim.x * blockIdx.x + threadIdx.x, col = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x, row = blockDim.y * blockIdx.y + threadIdx.y;
     if((row < BATCH_SIZE) && (col < n_out)){
         error[row * n_out + col] = predict[row * n_out + col] - truth[row * n_out + col]; 
@@ -156,7 +155,6 @@ __global__ void linear_forward_gpu(float *in, float *out, float *weights, float 
 }
 
 __global__ void linear_backprop_gpu(float *errors, float *out_errors, float *weights, int n_in, int n_out) {
-    //int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
     int col = blockDim.x*blockIdx.x + threadIdx.x, row = blockDim.y*blockIdx.y + threadIdx.y;
     int errors_index, out_errors_index, weights_index;
 
@@ -172,7 +170,6 @@ __global__ void linear_backprop_gpu(float *errors, float *out_errors, float *wei
 
 
 __global__ void linear_update_gpu(float *in, float *errors, float *weights, float *bias, int n_in, int n_out, float lr) {
-    //int row = blockDim.x*blockIdx.x + threadIdx.x, col = blockDim.y*blockIdx.y + threadIdx.y;
     int col = blockDim.x*blockIdx.x + threadIdx.x, row = blockDim.y*blockIdx.y + threadIdx.y;
     int in_index, errors_index, weights_index;
 
@@ -355,14 +352,7 @@ int main(int argc, char *argv[]) {
     l1_bias = (float*) malloc(n_hidden * sizeof(float)); 
     l2_weights = (float*) malloc(n_out * n_hidden * sizeof(float)); 
     l2_bias = (float*) malloc(n_out * sizeof(float)); 
-  //  l1_weights = (float*) calloc(n_in * n_hidden,sizeof(float)); 
-  //  l1_bias = (float*) calloc(n_hidden, sizeof(float)); 
-  //  l2_weights = (float*) calloc(n_out * n_hidden,sizeof(float)); 
-  //  l2_bias = (float*) calloc(n_out,sizeof(float)); 
-   // cudaMallocManaged(&l1_weights, n_in * n_hidden*sizeof(float));
-   // cudaMallocManaged(&l1_bias, n_hidden*sizeof(float));
-   // cudaMallocManaged(&l2_weights, n_out * n_hidden*sizeof(float));
-   // cudaMallocManaged(&l2_bias, n_out*sizeof(float));
+
     int n_block_rows = (BATCH_SIZE-1) / BLOCK_SIZE + 1;
     int l1_block_cols = (n_hidden - 1) / BLOCK_SIZE +1;
     int l2_block_cols = (n_out - 1) / BLOCK_SIZE +1;
@@ -399,18 +389,14 @@ int main(int argc, char *argv[]) {
     cudaMalloc((void**)&dev_l1_out, size_hidden);
     cudaMalloc((void**)&dev_l2_out, size_output);
     cudaMalloc((void**)&dev_relu_out, size_hidden);
-  //  cudaMallocManaged(&l1_out, n_hidden * BATCH_SIZE*sizeof(float));
-   // cudaMallocManaged(&l2_out, n_out * BATCH_SIZE*sizeof(float));
-   // cudaMallocManaged(&relu_out, n_hidden * BATCH_SIZE*sizeof(float));
+  
     //Input Output target
     cudaMallocManaged(&input, n_in * data_size*sizeof(float));
     cudaMallocManaged(&output, n_out * BATCH_SIZE*sizeof(float));
     cudaMallocManaged(&target, n_out * data_size*sizeof(float));
 
     //Error
-//    cudaMallocManaged(&l1_error, n_hidden * BATCH_SIZE*sizeof(float));
-//    cudaMallocManaged(&l2_error, n_out * BATCH_SIZE*sizeof(float));
-//    cudaMallocManaged(&relu_error, n_hidden * BATCH_SIZE*sizeof(float));
+
     cudaMalloc((void**)&l1_error, size_hidden);
     cudaMalloc((void**)&l2_error, size_output);
     cudaMalloc((void**)&relu_error, size_hidden);
@@ -438,10 +424,7 @@ int main(int argc, char *argv[]) {
         for (int batch = 0; batch < train_test_split / BATCH_SIZE; batch++) {
             float *curr_in = &input[batch * BATCH_SIZE * n_in];
             float *curr_target = &target[batch * BATCH_SIZE * n_out];
-            // set_eq(input, &x_train[batch * BATCH_SIZE * n_in], n_in * BATCH_SIZE);
-            // set_eq(target, &y_train[batch * BATCH_SIZE * n_out], n_out * BATCH_SIZE); 
-//            cudaMemcpy(dev_curr_in, &input[batch * BATCH_SIZE * n_out], n_in * BATCH_SIZE * sizeof(float),cudaMemcpyHostToDevice);
-//            cudaMemcpy(dev_curr_in, &input[batch * BATCH_SIZE * n_out], n_in * BATCH_SIZE * sizeof(float),cudaMemcpyHostToDevice);
+           
             cudaMemset(relu_error, 0, n_hidden * BATCH_SIZE*sizeof(float));
             // FORWARD PROPAGATION STEP
             b = chrono::steady_clock::now();
