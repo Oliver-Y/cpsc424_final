@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=NN_CPU
-#SBATCH --output=%x%j.out
+#SBATCH --output=%x-%j.out
 #SBATCH --ntasks=1 --nodes=1 --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
 #SBATCH --time=45:00
